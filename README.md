@@ -1,9 +1,110 @@
-# CarND-Controls-MPC
+# Model Predictive Control for Udacity Simulator
 Self-Driving Car Engineer Nanodegree Program
 
----
+## Overview
+This project implements a model predictive controler (MPC) to steer 
+a vehicle via throttle and left/right steering in Udacitys simulator to drive safely and fast on a race
+track without leaving the road.
 
-## Dependencies
+## Rubric Points
+
+### The Model
+
+The model is implemented in [MPC.cpp](src/MPC.cpp). Class FG_eval defines the cost function and the state transition equations.
+The function MPC::Solve defines constraints for the initial state only to fix all state variables
+to the specific initial state values and MPC::Solve also defines upper and lower bounds.
+
+#### State transition equations
+The state equations are defined in [MPC.cpp](src/MPC.cpp) lines 110 to 118. 
+The state equations implement a dynamic vehicle model from the Udacity course material
+that fits the vehicle simulator behaviour.
+The transition between subsequent states is defined via an equation for each state variable (e.g. x, y, v).
+The upper and lower boundary constraints are set to zero for all equations so that the
+solver finds an actuator solution for each state that fulfills the equations (see [MPC.cpp](src/MPC.cpp), lines 175-180).
+As an exception, the initial state equations are set to the specific values of the given initial state.  
+
+The following dynamic model is implemented:
+* x[t] = x[t-1] + (v[t-1] * cos(psi[t-1]) * dt)
+* y[t] = y[t-1] + (v[t-1] * sin(psi[t-1]) * dt)
+* psi[t] = psi[t-1] - v[t-1] * delta[t-1] / Lf * dt);
+* v[t] = v[t-1] + (a[t-1] * dt);
+* cte[t] = cte[t-1] + (v[t-1] * sin(epsi[t-1]) * dt);
+* epsi[t] = (psi[t-1] - ref_psi[t-1]) + (v[t-1] * delta[t-1] / Lf * dt);
+      
+The variables are defined like this:
+* x, y: x and y position of the ego vehicle in its vehicle coordinate system with the undelayed initial state as origin
+* v: velocity in miles per hour
+* a: throttle in range [-1, 1]
+* Lf: distance from center of rear axis to front of the vehicle (constant 2.67m)
+* dt: delta time between time steps, 100 ms is used
+* delta: yaw rate
+* psi: heading in radians
+* cte: cross track error which is the distance to reference waypoint path in meters
+* epsi: heading error which is the difference to the reference heading in radians
+* ref_psi: reference (desired) heading in radians 
+
+#### Cost function
+The cost function ([MPC.cpp](src/MPC.cpp), lines 45 - 66) sums a penalty for
+* cross track error
+* error on vehicle heading
+* deviation from reference velocity 
+* using steering actuator
+* using steering actuator multiplied by velocity in order to avoid drastic steering in high velocity
+* delta of actuator values between timesteps in order to have smooth actuator changes
+
+The cost function makes sure that the vehicle keeps on close to the reference 
+path (center of road), heads into the reference direction, drives fast enough,
+steers less at high speeds and actuator changes are low. 
+
+Choosing the factors on the individual cost function parts was done via manually tuning
+with a lot of experiments. Finally adding the combined error to penalize steering on higher velocity
+improved the model performance significantly.
+Since I did not normalize the errors to a common value range, the factors also include a normalizing 
+component e.g. to normalize between actual to desired velocity error and actual to desired heading error. 
+
+I set the reference velocity to 90. In order to achieve a higher velocity (by increasing reference velocity)
+and also in order to go faster in curves, more cost factor parameter tuning would be needed.
+An automation of exploring cost factor combinations would help but requires an automatic reset of
+the simulator. 
+
+#### Actuators
+The actuators are steering and throttle. The model constraints steering to between [-25, 25] degrees
+and throttle to [-1, 1]. The actuators are part of the state transition equations.
+
+### Timestep Length and Elapsed Duration (N & dt)
+
+For the MPC, the number of timesteps (N) was set to 10 with an elapsed duration between timesteps (dt) of 0.1 seconds.
+This allows a foresight of 1 second for the actuators computed by MPC. This short foresight keeps the 
+computational complexity for the solver low and is enough to handle an upcoming curve. It is not necessary
+to have a foresight longer then this. Choosing 100ms for dt was necessary to have faster reactions on actuators. 
+Other values tried were N=20 with dt=0.1 and N=20 with dt=0.2 but results lead to problems in the s-curve.
+Also the 200ms for dt appeared to be too less reactive.
+
+### Polynomial Fitting and MPC Preprocessing
+
+The waypoints received in the telemetry event are transformed from world to vehicle coordinate system ([main.cpp](src/main.cpp):106).
+Then a third order polynomial is fitted to the waypoints. This polynomial and delayed initial state is then used to 
+calculate the actuators via mpc.
+
+### Model Predictive Control with Latency
+
+The actuators have a delay of 100 milliseconds which is implemented via sending the actuator inputs 100ms after
+they have been determined via mpc (see [main.cpp](src/main.cpp):182). 
+To take this delay into account, the mpc must calculate actuator values that can be applied
+on the state - called delayed state from now on - after 100 ms have passed. 
+To achieve this, this delayed state must be computed and passed as initial state into the mpc.
+The delayed state is calculated in [main.cpp](src/main.cpp):131 using the vehicle dynamic model.  
+
+### Simulation - The vehicle must successfully drive a lap around the track.
+The vehicle drives around the track without leaving the road and without driving on ledges.
+In curves the vehicle slows down as intended. 
+After curves the vehicle accelerates. The vehicle can drive lap after lap successfully 
+(also with a running start from lap 2 on).
+
+
+## Udacity Instructions
+
+### Dependencies
 
 * cmake >= 3.5
  * All OSes: [click here for installation instructions](https://cmake.org/install/)
@@ -31,14 +132,14 @@ Self-Driving Car Engineer Nanodegree Program
 * Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
 
 
-## Basic Build Instructions
+### Basic Build Instructions
 
 1. Clone this repo.
 2. Make a build directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./mpc`.
 
-## Tips
+### Tips
 
 1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
 is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
@@ -48,7 +149,7 @@ is the vehicle starting offset of a straight line (reference). If the MPC implem
 4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
     5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
 
-## Editor Settings
+### Editor Settings
 
 We've purposefully kept editor configuration files out of this repo in order to
 keep it as simple and environment agnostic as possible. However, we recommend
@@ -57,52 +158,9 @@ using the following settings:
 * indent using spaces
 * set tab width to 2 spaces (keeps the matrices in source code aligned)
 
-## Code Style
+### Code Style
 
 Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
 
-## Project Instructions and Rubric
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
-
-## Hints!
-
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).

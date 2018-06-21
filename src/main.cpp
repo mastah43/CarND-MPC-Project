@@ -145,10 +145,8 @@ int main() {
           msgJson["steering_angle"] = mpc_result.delta/deg2rad(25);
           msgJson["throttle"] = mpc_result.a;
 
-          double cte = ref_trajectory_coeffs[0];
-          double epsi = -atan(ref_trajectory_coeffs[1]);
-          std::cout << "delta=" << mpc_result.delta << "; a=" << mpc_result.a
-                    << "; cte=" << cte << "; epsi=" << epsi << std::endl;
+          //std::cout << "delta=" << mpc_result.delta << "; a=" << mpc_result.a
+          //          << "; cte=" << cte0 << "; epsi=" << epsi0 << std::endl;
 
           //Display the MPC predicted trajectory
           msgJson["mpc_x"] = mpc_result.x;
