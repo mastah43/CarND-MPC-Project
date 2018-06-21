@@ -51,10 +51,10 @@ public:
       cost += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
-    // Minimize the use of actuators.
+    // Minimize the use steering - especially when very fast.
     for (unsigned int t = 0; t < N - 1; t++) {
       cost += 100*CppAD::pow(vars[delta_start + t], 2);
-      cost += 50*CppAD::pow(vars[a_start + t], 2);
+      cost += 500*CppAD::pow(vars[v_start + t] * vars[delta_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
@@ -228,7 +228,7 @@ MPC::Result MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
-  auto cost = solution.obj_value;
+  //auto cost = solution.obj_value;
   //std::cout << "Cost " << cost << std::endl;
 
   // result starts with next state after initial state
